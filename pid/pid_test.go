@@ -35,6 +35,10 @@ func TestNew(t *testing.T) {
 	if pid.Path() != path {
 		t.Error("path in new doesn't match associated path")
 	}
+
+	if !pid.JsonMode {
+		t.Error("JsonMode should default to truthy")
+	}
 }
 
 // Test that the free function works on a path that doesn't exist
@@ -63,35 +67,71 @@ func TestPIDSave(t *testing.T) {
 	if err := makeTmpDir(); err != nil {
 		t.Fatal(err)
 	}
-	defer removeTmpDir()
 
 	path := filepath.Join(tmpDir, "test.pid")
-	pid := New(path)
 
-	// Ensure the path doesn't exist
-	if exists, _ := pathExists(path); exists {
-		t.Fatal("test path already exists")
-	}
+	t.Run("default mode", func(t *testing.T) {
+		defer removeTmpDir()
 
-	// Ensure there is no information in the PID until save
-	if pid.PID != 0 || pid.PPID != 0 {
-		t.Error("data exists in PID before save")
-	}
+		pid := New(path)
 
-	// Save the PID file
-	if err := pid.Save(); err != nil {
-		t.Error(err)
-	}
+		// Ensure the path doesn't exist
+		if exists, _ := pathExists(path); exists {
+			t.Fatal("test path already exists")
+		}
 
-	// Ensure the PID is populated
-	if pid.PID == 0 || pid.PPID == 0 {
-		t.Error("data does not exist in PID after save")
-	}
+		// Ensure there is no information in the PID until save
+		if pid.PID != 0 || pid.PPID != 0 {
+			t.Error("data exists in PID before save")
+		}
 
-	// Ensure the path exists
-	if exists, _ := pathExists(path); !exists {
-		t.Fatal("pid file does not exist after save")
-	}
+		// Save the PID file
+		if err := pid.Save(); err != nil {
+			t.Error(err)
+		}
+
+		// Ensure the PID is populated
+		if pid.PID == 0 || pid.PPID == 0 {
+			t.Error("data does not exist in PID after save")
+		}
+
+		// Ensure the path exists
+		if exists, _ := pathExists(path); !exists {
+			t.Fatal("pid file does not exist after save")
+		}
+	})
+
+	t.Run("string mode", func(t *testing.T) {
+		defer removeTmpDir()
+
+		pid := New(path)
+		pid.JsonMode = false
+
+		// Ensure the path doesn't exist
+		if exists, _ := pathExists(path); exists {
+			t.Fatal("test path already exists")
+		}
+
+		// Ensure there is no information in the PID until save
+		if pid.PID != 0 || pid.PPID != 0 {
+			t.Error("data exists in PID before save")
+		}
+
+		// Save the PID file
+		if err := pid.Save(); err != nil {
+			t.Error(err)
+		}
+
+		// Ensure the PID is populated
+		if pid.PID == 0 || pid.PPID == 0 {
+			t.Error("data does not exist in PID after save")
+		}
+
+		// Ensure the path exists
+		if exists, _ := pathExists(path); !exists {
+			t.Fatal("pid file does not exist after save")
+		}
+	})
 }
 
 // Test that a PID can be freed after being saved
@@ -165,20 +205,44 @@ func TestSingleProcess(t *testing.T) {
 
 // Test that a PID can be loaded from an existing file
 func TestLoad(t *testing.T) {
-	// Create a new PID and make sure it has no data
-	pid := New("testdata/test.pid")
-	if pid.PID != 0 || pid.PPID != 0 {
-		t.Error("data exists in PID before load")
-	}
+	t.Run("default mode", func(t *testing.T) {
+		// Create a new PID and make sure it has no data
+		pid := New("testdata/test.pid")
+		if pid.PID != 0 || pid.PPID != 0 {
+			t.Error("data exists in PID before load")
+		}
 
-	// Load the PID file
-	if err := pid.Load(); err != nil {
-		t.Error(err)
-	}
+		// Load the PID file
+		if err := pid.Load(); err != nil {
+			t.Error(err)
+		}
 
-	if pid.PID != 42 || pid.PPID != 7 {
-		t.Error("data does not exist in PID after load")
-	}
+		if pid.PID != 42 || pid.PPID != 7 {
+			t.Error("data does not exist in PID after load")
+		}
+	})
+
+	t.Run("string mode", func(t *testing.T) {
+		// Create a new PID and make sure it has no data
+		pid := New("testdata/string.pid")
+		pid.JsonMode = false
+		if pid.PID != 0 || pid.PPID != 0 {
+			t.Error("data exists in PID before load")
+		}
+
+		// Load the PID file
+		if err := pid.Load(); err != nil {
+			t.Error(err)
+		}
+
+		if pid.PID != 42 {
+			t.Error("data does not exist in PID after load")
+		}
+
+		if pid.PPID != 0 {
+			t.Error("expected PPID to not exist after load")
+		}
+	})
 }
 
 // Test that a PID cannot be loadeded from a missing file

@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 //===========================================================================
@@ -31,7 +33,7 @@ func Path(filename string) string {
 // an empty PID, which can then be loaded or saved in order to obtain
 // process information.
 func New(path string) *PID {
-	return &PID{path: path}
+	return &PID{path: path, JsonMode: true}
 }
 
 //===========================================================================
@@ -41,24 +43,34 @@ func New(path string) *PID {
 // PID describes the server process and is accessed by both the server and the
 // command line client in order to facilitate cross-process communication.
 type PID struct {
-	PID  int    `json:"pid"`  // The process id assigned by the OS
-	PPID int    `json:"ppid"` // The parent process id
-	path string // The path to the pid file
+	PID      int    `json:"pid"` // The process id assigned by the OS
+	PPID     int    `json:"ppid"`
+	path     string // The path to the pid file
+	JsonMode bool   // Write/Reads the PID data in JSON
+}
+
+// SetPid sets the currently running Process ID
+func (pid *PID) SetPid() {
+	pid.PID = os.Getpid()
+	pid.PPID = os.Getppid()
 }
 
 // Save the PID file to disk after first determining the process ids.
 // NOTE: This method will fail if the PID file already exists.
 func (pid *PID) Save() error {
 	var err error
+	var data []byte
 
-	// Get the currently running Process ID and Parent ID
-	pid.PID = os.Getpid()
-	pid.PPID = os.Getppid()
+	pid.SetPid()
 
-	// Marshall the JSON representation
-	data, err := json.Marshal(pid)
-	if err != nil {
-		return err
+	if pid.JsonMode {
+		// Marshall the JSON representation
+		data, err = json.Marshal(pid)
+		if err != nil {
+			return err
+		}
+	} else {
+		data = []byte(strconv.Itoa(pid.PID))
 	}
 
 	path := pid.Path()
@@ -78,12 +90,21 @@ func (pid *PID) Save() error {
 
 // Load the PID file -- used by the command line client to populate the PID.
 func (pid *PID) Load() error {
+	var err error
+
 	data, err := ioutil.ReadFile(pid.Path())
+
 	if err != nil {
 		return fmt.Errorf("no PID file exists at %s; process not running?", pid.Path())
 	}
 
-	return json.Unmarshal(data, &pid)
+	if pid.JsonMode {
+		return json.Unmarshal(data, &pid)
+	} else {
+		pidString := strings.TrimSuffix(string(data), "\n")
+		pid.PID, err = strconv.Atoi(pidString)
+		return err
+	}
 }
 
 // Free the PID file (delete it) -- used by the server on shutdown to cleanup
